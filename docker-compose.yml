@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: meeting
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - meeting-network
+    restart: unless-stopped
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - meeting-network
+    restart: unless-stopped
+
+  # API Server (Go + Gin)
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    environment:
+      - API_PORT=8080
+      - POSTGRES_DSN=host=postgres user=postgres password=postgres dbname=meeting port=5432 sslmode=disable
+      - REDIS_ADDR=redis:6379
+      - JWT_SECRET=meeting-secret-key-2024
+      - JWT_REFRESH_SECRET=meeting-refresh-secret-2024
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - meeting-network
+    restart: unless-stopped
+
+  # Signaling Server (Go + Gorilla WebSocket)
+  signaling:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.signaling
+    environment:
+      - SIGNALING_PORT=8081
+      - REDIS_ADDR=redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - meeting-network
+    restart: unless-stopped
+
+  # SFU Server (Go + Pion WebRTC)
+  sfu:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.sfu
+    environment:
+      - SFU_PORT=8082
+      - PUBLIC_IP=${SERVER_PUBLIC_IP:-127.0.0.1}
+    ports:
+      - "8082:8082"
+      - "50000-50100:50000-50100/udp"
+    networks:
+      - meeting-network
+    restart: unless-stopped
+
+  # Frontend (React)
+  client:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.client
+    networks:
+      - meeting-network
+    restart: unless-stopped
+
+  # Nginx
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+      - signaling
+      - sfu
+      - client
+    networks:
+      - meeting-network
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  meeting-network:
+    driver: bridge
