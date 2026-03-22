@@ -226,6 +226,7 @@ func (h *Hub) GetClientCount(meetingID string) int {
 
 // 信令处理方法
 func (c *Client) handleMessage(hub *Hub, msg WebSocketMessage) {
+	log.Printf("Received message: %s from client %s", msg.Event, c.ID)
 	switch msg.Event {
 	case "join-room":
 		c.handleJoinRoom(hub, msg.Data)
@@ -256,6 +257,13 @@ func (c *Client) handleMessage(hub *Hub, msg WebSocketMessage) {
 		c.handleConsumerResume(hub, msg.Data)
 	case "close-producer":
 		c.handleCloseProducer(hub, msg.Data)
+	// P2P WebRTC
+	case "offer":
+		c.handleOffer(hub, msg.Data)
+	case "answer":
+		c.handleAnswer(hub, msg.Data)
+	case "ice-candidate":
+		c.handleIceCandidate(hub, msg.Data)
 	}
 }
 
@@ -479,6 +487,64 @@ func (c *Client) handleCloseProducer(hub *Hub, data json.RawMessage) {
 		},
 	})
 	hub.Broadcast(c.MeetingID, broadcast, c.ID)
+}
+
+// P2P WebRTC 信令处理
+func (c *Client) handleOffer(hub *Hub, data json.RawMessage) {
+	var payload struct {
+		TargetPeerID string          `json:"target_peer_id"`
+		SDP          json.RawMessage `json:"sdp"`
+		Type         string          `json:"type"`
+	}
+	json.Unmarshal(data, &payload)
+	log.Printf("handleOffer: from=%s, to=%s", c.ID, payload.TargetPeerID)
+
+	msg, _ := json.Marshal(map[string]interface{}{
+		"event": "offer",
+		"data": map[string]interface{}{
+			"from_peer_id": c.ID,
+			"sdp":          payload.SDP,
+			"type":         payload.Type,
+		},
+	})
+	hub.SendToClient(c.MeetingID, payload.TargetPeerID, msg)
+}
+
+func (c *Client) handleAnswer(hub *Hub, data json.RawMessage) {
+	var payload struct {
+		TargetPeerID string          `json:"target_peer_id"`
+		SDP          json.RawMessage `json:"sdp"`
+		Type         string          `json:"type"`
+	}
+	json.Unmarshal(data, &payload)
+	log.Printf("handleAnswer: from=%s, to=%s", c.ID, payload.TargetPeerID)
+
+	msg, _ := json.Marshal(map[string]interface{}{
+		"event": "answer",
+		"data": map[string]interface{}{
+			"from_peer_id": c.ID,
+			"sdp":          payload.SDP,
+			"type":         payload.Type,
+		},
+	})
+	hub.SendToClient(c.MeetingID, payload.TargetPeerID, msg)
+}
+
+func (c *Client) handleIceCandidate(hub *Hub, data json.RawMessage) {
+	var payload struct {
+		TargetPeerID string      `json:"target_peer_id"`
+		Candidate    interface{} `json:"candidate"`
+	}
+	json.Unmarshal(data, &payload)
+
+	msg, _ := json.Marshal(map[string]interface{}{
+		"event": "ice-candidate",
+		"data": map[string]interface{}{
+			"from_peer_id": c.ID,
+			"candidate":    payload.Candidate,
+		},
+	})
+	hub.SendToClient(c.MeetingID, payload.TargetPeerID, msg)
 }
 
 func (c *Client) readPump(hub *Hub) {

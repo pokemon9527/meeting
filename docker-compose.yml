@@ -10,6 +10,7 @@ services:
       POSTGRES_PASSWORD: postgres
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
     ports:
       - "5432:5432"
     networks:
@@ -28,8 +29,71 @@ services:
       - meeting-network
     restart: unless-stopped
 
+  # Zookeeper (for Kafka)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - meeting-network
+    restart: unless-stopped
+
+  # Kafka
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - meeting-network
+    restart: unless-stopped
+
+  # MinIO
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - meeting-network
+    restart: unless-stopped
+
+  # MinIO Init (create buckets)
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc mb myminio/recordings --ignore-existing;
+      mc anonymous set download myminio/recordings;
+      exit 0;
+      "
+    networks:
+      - meeting-network
+    restart: "no"
+
   # API Server (Go + Gin)
   api:
+    image: meeting-api:latest
     build:
       context: .
       dockerfile: docker/Dockerfile.api
@@ -38,18 +102,27 @@ services:
       - POSTGRES_DSN=host=postgres user=postgres password=postgres dbname=meeting port=5432 sslmode=disable
       - REDIS_ADDR=redis:6379
       - JWT_SECRET=meeting-secret-key-2024
-      - JWT_REFRESH_SECRET=meeting-refresh-secret-2024
+      - JWT_REFRESH_SECRET=meeting-refresh-secret-key-2024
+      - KAFKA_BROKERS=kafka:29092
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=recordings
+      - MINIO_USE_SSL=false
     ports:
       - "8080:8080"
     depends_on:
       - postgres
       - redis
+      - kafka
+      - minio
     networks:
       - meeting-network
     restart: unless-stopped
 
   # Signaling Server (Go + Gorilla WebSocket)
   signaling:
+    image: meeting-signaling:latest
     build:
       context: .
       dockerfile: docker/Dockerfile.signaling
@@ -66,21 +139,112 @@ services:
 
   # SFU Server (Go + Pion WebRTC)
   sfu:
+    image: meeting-sfu:latest
     build:
       context: .
       dockerfile: docker/Dockerfile.sfu
     environment:
       - SFU_PORT=8082
-      - PUBLIC_IP=${SERVER_PUBLIC_IP:-127.0.0.1}
+      - PUBLIC_IP=${SERVER_PUBLIC_IP:-192.168.1.78}
+      - TURN_URL=turn:${SERVER_PUBLIC_IP:-192.168.1.78}:3478
+      - TURN_USERNAME=meeting
+      - TURN_PASSWORD=meeting123
+      - KAFKA_BROKERS=kafka:29092
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=recordings
+      - POSTGRES_DSN=host=postgres user=postgres password=postgres dbname=meeting port=5432 sslmode=disable
     ports:
       - "8082:8082"
-      - "50000-50100:50000-50100/udp"
+      - "50000-50050:50000-50050/udp"
+    depends_on:
+      - turn
+      - kafka
+      - minio
+    networks:
+      - meeting-network
+    restart: unless-stopped
+
+  # TURN/STUN Server (Go + Pion)
+  turn:
+    image: meeting-turn:latest
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.turn
+    environment:
+      - PUBLIC_IP=${SERVER_PUBLIC_IP:-192.168.1.78}
+      - TURN_USERNAME=meeting
+      - TURN_PASSWORD=meeting123
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "49152-49200:49152-49200/udp"
+    networks:
+      - meeting-network
+    restart: unless-stopped
+
+  # Recording Worker
+  recording-worker:
+    image: meeting-recording-worker:latest
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.recording-worker
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+      - POSTGRES_DSN=host=postgres user=postgres password=postgres dbname=meeting port=5432 sslmode=disable
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=recordings
+      - MINIO_USE_SSL=false
+    depends_on:
+      - kafka
+      - postgres
+      - minio
+    networks:
+      - meeting-network
+    restart: unless-stopped
+
+  # Recording Indexer
+  recording-indexer:
+    image: meeting-recording-indexer:latest
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.recording-indexer
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+      - POSTGRES_DSN=host=postgres user=postgres password=postgres dbname=meeting port=5432 sslmode=disable
+    depends_on:
+      - kafka
+      - postgres
+    networks:
+      - meeting-network
+    restart: unless-stopped
+
+  # Cleanup Worker
+  cleanup-worker:
+    image: meeting-cleanup-worker:latest
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cleanup-worker
+    environment:
+      - POSTGRES_DSN=host=postgres user=postgres password=postgres dbname=meeting port=5432 sslmode=disable
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=recordings
+      - MINIO_USE_SSL=false
+    depends_on:
+      - postgres
+      - minio
     networks:
       - meeting-network
     restart: unless-stopped
 
   # Frontend (React)
   client:
+    image: meeting-client:latest
     build:
       context: .
       dockerfile: docker/Dockerfile.client
@@ -93,13 +257,17 @@ services:
     image: nginx:alpine
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/cert.pem:/etc/nginx/cert.pem:ro
+      - ./docker/key.pem:/etc/nginx/key.pem:ro
     depends_on:
       - api
       - signaling
       - sfu
       - client
+      - minio
     networks:
       - meeting-network
     restart: unless-stopped
@@ -107,6 +275,7 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  minio-data:
 
 networks:
   meeting-network:

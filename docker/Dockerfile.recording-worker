@@ -1,0 +1,11 @@
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates ffmpeg
+
+WORKDIR /app
+
+COPY recording-worker/recording-worker .
+
+EXPOSE 8080
+
+CMD ["./recording-worker"]

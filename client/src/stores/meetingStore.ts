@@ -1,11 +1,17 @@
 import { create } from 'zustand';
 import type { MeetingInfo, Peer, ChatMessage } from '../types';
 
+interface RemoteStream {
+  peerId: string;
+  stream: MediaStream;
+}
+
 interface MeetingState {
   meetingId: string | null;
   meetingInfo: MeetingInfo | null;
   peerId: string | null;
   peers: Map<string, Peer>;
+  remoteStreams: Map<string, RemoteStream>;
   localAudioEnabled: boolean;
   localVideoEnabled: boolean;
   isScreenSharing: boolean;
@@ -21,6 +27,8 @@ interface MeetingState {
   addPeer: (peer: Peer) => void;
   removePeer: (peerId: string) => void;
   updatePeer: (peerId: string, updates: Partial<Peer>) => void;
+  addRemoteStream: (peerId: string, stream: MediaStream) => void;
+  removeRemoteStream: (peerId: string) => void;
   toggleAudio: () => void;
   toggleVideo: () => void;
   toggleScreenShare: () => void;
@@ -38,6 +46,7 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
   meetingInfo: null,
   peerId: null,
   peers: new Map(),
+  remoteStreams: new Map(),
   localAudioEnabled: true,
   localVideoEnabled: true,
   isScreenSharing: false,
@@ -66,7 +75,9 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
   removePeer: (peerId) => {
     const peers = new Map(get().peers);
     peers.delete(peerId);
-    set({ peers });
+    const remoteStreams = new Map(get().remoteStreams);
+    remoteStreams.delete(peerId);
+    set({ peers, remoteStreams });
   },
 
   updatePeer: (peerId, updates) => {
@@ -76,6 +87,18 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
       peers.set(peerId, { ...peer, ...updates });
       set({ peers });
     }
+  },
+
+  addRemoteStream: (peerId, stream) => {
+    const remoteStreams = new Map(get().remoteStreams);
+    remoteStreams.set(peerId, { peerId, stream });
+    set({ remoteStreams });
+  },
+
+  removeRemoteStream: (peerId) => {
+    const remoteStreams = new Map(get().remoteStreams);
+    remoteStreams.delete(peerId);
+    set({ remoteStreams });
   },
 
   toggleAudio: () => set((state) => ({ localAudioEnabled: !state.localAudioEnabled })),
@@ -108,6 +131,7 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
       meetingInfo: null,
       peerId: null,
       peers: new Map(),
+      remoteStreams: new Map(),
       localAudioEnabled: true,
       localVideoEnabled: true,
       isScreenSharing: false,

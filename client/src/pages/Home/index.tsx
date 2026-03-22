@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button, Input, Modal, Form, message, Card } from 'antd';
 import {
   VideoCameraAddOutlined,
   TeamOutlined,
+  HomeOutlined,
+  LogoutOutlined,
+  VideoCameraOutlined,
 } from '@ant-design/icons';
 import { meetingApi } from '../../services/api';
 import { useUserStore } from '../../stores/userStore';
@@ -29,7 +32,7 @@ const Home: React.FC = () => {
       message.success('会议创建成功');
       setCreateModalVisible(false);
       createForm.resetFields();
-      navigate(`/meeting/${meeting.meetingId}`);
+      navigate(`/meeting/${meeting.meeting_id}`);
     } catch (error: any) {
       message.error(error.response?.data?.message || '创建失败');
     } finally {
@@ -58,40 +61,73 @@ const Home: React.FC = () => {
   return (
     <div className="home-container">
       <div className="home-header">
-        <h1>视频会议</h1>
-        <p>高效、稳定的多人视频会议系统</p>
-        {isAuthenticated && (
-          <div className="user-info">
-            <span>欢迎, {user?.username}</span>
-            <Button onClick={logout}>退出登录</Button>
-          </div>
-        )}
+        <div className="header-left">
+          <Link to="/" className="back-home">
+            <HomeOutlined />
+            <span>返回首页</span>
+          </Link>
+        </div>
+        <div className="header-center">
+          <h1>视频会议</h1>
+          <p>欢迎回来，{user?.username}</p>
+        </div>
+        <div className="header-right">
+          <Button 
+            icon={<LogoutOutlined />} 
+            onClick={logout}
+            className="logout-btn"
+          >
+            退出登录
+          </Button>
+        </div>
       </div>
 
       <div className="home-content">
-        <Card className="action-card" hoverable>
-          <VideoCameraAddOutlined className="action-icon" />
+        <Card className="action-card create-card" hoverable>
+          <div className="card-icon">
+            <VideoCameraAddOutlined />
+          </div>
           <h3>创建会议</h3>
           <p>创建一个新的视频会议</p>
           <Button
             type="primary"
             size="large"
             onClick={() => setCreateModalVisible(true)}
+            className="action-btn"
           >
             创建会议
           </Button>
         </Card>
 
-        <Card className="action-card" hoverable>
-          <TeamOutlined className="action-icon" />
+        <Card className="action-card join-card" hoverable>
+          <div className="card-icon">
+            <TeamOutlined />
+          </div>
           <h3>加入会议</h3>
           <p>使用会议号加入会议</p>
           <Button
             type="primary"
             size="large"
             onClick={() => setJoinModalVisible(true)}
+            className="action-btn"
           >
             加入会议
+          </Button>
+        </Card>
+
+        <Card className="action-card recordings-card" hoverable>
+          <div className="card-icon">
+            <VideoCameraOutlined />
+          </div>
+          <h3>录像回放</h3>
+          <p>查看会议录像</p>
+          <Button
+            type="primary"
+            size="large"
+            onClick={() => navigate('/recordings')}
+            className="action-btn"
+          >
+            查看录像
           </Button>
         </Card>
       </div>
@@ -101,6 +137,7 @@ const Home: React.FC = () => {
         open={createModalVisible}
         onCancel={() => setCreateModalVisible(false)}
         footer={null}
+        className="meeting-modal"
       >
         <Form form={createForm} onFinish={handleCreateMeeting} layout="vertical">
           <Form.Item name="title" label="会议主题">
@@ -110,7 +147,7 @@ const Home: React.FC = () => {
             <Input.Password placeholder="设置会议密码" />
           </Form.Item>
           <Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading} block>
+            <Button type="primary" htmlType="submit" loading={loading} block className="submit-btn">
               创建
             </Button>
           </Form.Item>
@@ -122,6 +159,7 @@ const Home: React.FC = () => {
         open={joinModalVisible}
         onCancel={() => setJoinModalVisible(false)}
         footer={null}
+        className="meeting-modal"
       >
         <Form form={joinForm} onFinish={handleJoinMeeting} layout="vertical">
           <Form.Item
@@ -135,7 +173,7 @@ const Home: React.FC = () => {
             <Input.Password placeholder="如有密码请输入" />
           </Form.Item>
           <Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading} block>
+            <Button type="primary" htmlType="submit" loading={loading} block className="submit-btn">
               加入
             </Button>
           </Form.Item>

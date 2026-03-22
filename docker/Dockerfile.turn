@@ -1,0 +1,13 @@
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /app
+
+COPY turn .
+
+EXPOSE 3478/tcp
+EXPOSE 3478/udp
+EXPOSE 49152-65535/udp
+
+CMD ["./turn"]

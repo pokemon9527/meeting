@@ -1,13 +1,11 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { message, Spin } from 'antd';
 import { VideoGrid } from '../../components/VideoGrid';
 import { Toolbar } from '../../components/Toolbar';
 import { ChatPanel } from '../../components/ChatPanel';
 import { ParticipantList } from '../../components/ParticipantList';
-import { useSocket } from '../../hooks/useSocket';
-import { useWebRTC } from '../../hooks/useWebRTC';
-import { useMedia } from '../../hooks/useMedia';
+import { useSocket, setLocalStream, setScreenStream } from '../../hooks/useSocket';
 import { useMeetingStore } from '../../stores/meetingStore';
 import { useUserStore } from '../../stores/userStore';
 import { meetingApi } from '../../services/api';
@@ -22,110 +20,94 @@ const Meeting: React.FC = () => {
     setPeerId,
     setPeers,
     activePanel,
+    remoteStreams,
+    isScreenSharing,
+    setActivePanel,
     reset,
+    toggleScreenShare,
   } = useMeetingStore();
 
   const [loading, setLoading] = useState(true);
+  const [localStream, setLocalStreamState] = useState<MediaStream | null>(null);
+  const [screenStream, setScreenStreamState] = useState<MediaStream | null>(null);
 
-  const { connect, disconnect, emit } = useSocket();
-  const {
-    localStreamRef,
-    screenStreamRef,
-    audioEnabled,
-    videoEnabled,
-    getLocalStream,
-    getScreenStream,
-    toggleAudio,
-    toggleVideo,
-    stopLocalStream,
-    stopScreenStream,
-  } = useMedia();
-  const {
-    remoteStreams,
-    loadDevice,
-    createSendTransport,
-    createRecvTransport,
-    produce,
-    consume,
-    closeAll,
-  } = useWebRTC();
-
-  const localStream = localStreamRef.current;
-  const screenStream = screenStreamRef.current;
+  const { connect, disconnect, emit, startScreenShare, stopScreenShare } = useSocket();
+  const socketRef = useRef<any>(null);
+  const initializedRef = useRef(false);
 
   useEffect(() => {
-    if (!meetingId) {
-      navigate('/');
-      return;
-    }
+    if (!meetingId || initializedRef.current) return;
 
-    const joinMeeting = async () => {
+    const init = async () => {
+      initializedRef.current = true;
+
       try {
-        const response = await meetingApi.getMeeting(meetingId);
-        setMeetingInfo(response.data.data.meeting);
+        const meetingResponse = await meetingApi.getMeeting(meetingId);
+        setMeetingInfo(meetingResponse.data.data.meeting);
       } catch {
         message.error('获取会议信息失败');
         navigate('/');
+        return;
       }
-    };
 
-    joinMeeting();
-
-    return () => {
-      handleLeaveMeeting();
-    };
-  }, [meetingId]);
-
-  useEffect(() => {
-    if (!meetingId || !user) return;
-
-    const initializeMeeting = async () => {
       try {
-        const response = await meetingApi.joinMeeting({ meetingId });
-        const { token } = response.data.data;
+        let stream = null;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true,
+          });
+          setLocalStream(stream);
+          setLocalStreamState(stream);
+        } catch (mediaError) {
+          console.error('Failed to get media devices:', mediaError);
+          message.warning('无法访问摄像头或麦克风');
+        }
+
+        const joinResponse = await meetingApi.joinMeeting({ meetingId });
+        const { token } = joinResponse.data.data;
 
         const socket = connect(meetingId, token);
+        socketRef.current = socket;
 
-        socket.emit('join-room', {}, async (roomResponse: any) => {
-          if (!roomResponse.success) {
-            message.error(roomResponse.error || '加入会议失败');
+        socket.on('join-response', (data: any) => {
+          if (!data.success) {
+            message.error(data.error || '加入会议失败');
             navigate('/');
             return;
           }
 
-          setPeerId(roomResponse.peerId);
-          setPeers(roomResponse.peers);
+          setPeerId(data.peer_id);
+          
+          const localPeer = {
+            id: data.peer_id,
+            userId: user?.id,
+            username: user?.username || '我',
+            avatar: user?.avatar || '',
+            role: 'host',
+            audioEnabled: true,
+            videoEnabled: true,
+            isScreenSharing: false,
+            isHandRaised: false,
+          };
+          
+          const peersData = [
+            localPeer,
+            ...(data.producers || []).map((p: any) => ({
+              id: p.peer_id,
+              userId: '',
+              username: `User ${p.peer_id.slice(-4)}`,
+              avatar: '',
+              role: 'participant',
+              audioEnabled: true,
+              videoEnabled: true,
+              isScreenSharing: false,
+              isHandRaised: false,
+            })),
+          ];
+          setPeers(peersData);
 
-          try {
-            await loadDevice(roomResponse.rtpCapabilities);
-            await createSendTransport();
-            await createRecvTransport();
-
-            const stream = await getLocalStream();
-            const audioTrack = stream.getAudioTracks()[0];
-            const videoTrack = stream.getVideoTracks()[0];
-
-            if (audioTrack) {
-              await produce(audioTrack, { share: false });
-            }
-
-            if (videoTrack) {
-              await produce(videoTrack, { share: false });
-            }
-
-            setLoading(false);
-          } catch (error) {
-            console.error('Failed to initialize WebRTC:', error);
-            message.error('初始化媒体失败');
-          }
-        });
-
-        socket.on('new-producer', async (data: any) => {
-          try {
-            await consume(data.producerId, data.peerId, data.kind);
-          } catch (error) {
-            console.error('Failed to consume:', error);
-          }
+          setLoading(false);
         });
       } catch {
         message.error('加入会议失败');
@@ -133,47 +115,102 @@ const Meeting: React.FC = () => {
       }
     };
 
-    initializeMeeting();
-  }, [meetingId, user]);
+    init();
+
+    return () => {
+      if (socketRef.current) {
+        emit('leave-room');
+        disconnect();
+        if (localStream) {
+          localStream.getTracks().forEach(track => track.stop());
+        }
+        if (screenStream) {
+          screenStream.getTracks().forEach(track => track.stop());
+        }
+        reset();
+      }
+    };
+  }, [meetingId]);
 
   const handleToggleAudio = useCallback(() => {
-    toggleAudio();
-    emit('toggle-audio', { enabled: !audioEnabled });
-  }, [audioEnabled, toggleAudio, emit]);
+    if (localStream) {
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+      }
+    }
+  }, [localStream]);
 
   const handleToggleVideo = useCallback(() => {
-    toggleVideo();
-    emit('toggle-video', { enabled: !videoEnabled });
-  }, [videoEnabled, toggleVideo, emit]);
+    if (localStream) {
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+      }
+    }
+  }, [localStream]);
 
   const handleToggleScreenShare = useCallback(async () => {
-    try {
-      if (screenStream) {
-        stopScreenStream();
-        emit('toggle-screenshare', { enabled: false });
-      } else {
-        const stream = await getScreenStream();
-        const videoTrack = stream.getVideoTracks()[0];
-        if (videoTrack) {
-          await produce(videoTrack, { share: true });
-          emit('toggle-screenshare', { enabled: true });
+    if (isScreenSharing) {
+      stopScreenShare();
+      setScreenStreamState(null);
+      setScreenStream(null);
+      toggleScreenShare();
+      message.info('已停止屏幕共享');
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+          audio: false,
+        } as MediaStreamConstraints);
+
+        const started = await startScreenShare(stream);
+        if (started) {
+          setScreenStreamState(stream);
+          setScreenStream(stream);
+          toggleScreenShare();
+          message.success('屏幕共享已开启');
+
+          stream.getVideoTracks()[0].onended = () => {
+            stopScreenShare();
+            setScreenStreamState(null);
+            setScreenStream(null);
+            toggleScreenShare();
+            message.info('屏幕共享已结束');
+          };
+        }
+      } catch (error) {
+        console.error('Screen share error:', error);
+        if ((error as Error).name !== 'NotAllowedError') {
+          message.error('无法启动屏幕共享');
         }
       }
-    } catch (error) {
-      console.error('Screen share error:', error);
-      message.error('屏幕共享失败');
     }
-  }, [screenStream, getScreenStream, stopScreenStream, produce, emit]);
+  }, [isScreenSharing, startScreenShare, stopScreenShare, toggleScreenShare]);
 
   const handleLeaveMeeting = useCallback(() => {
     emit('leave-room');
     disconnect();
-    closeAll();
-    stopLocalStream();
-    stopScreenStream();
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+    }
+    if (screenStream) {
+      screenStream.getTracks().forEach(track => track.stop());
+    }
     reset();
     navigate('/');
-  }, [emit, disconnect, closeAll, stopLocalStream, stopScreenStream, reset, navigate]);
+  }, [emit, disconnect, localStream, screenStream, reset, navigate]);
+
+  const handleToggleChat = useCallback(() => {
+    setActivePanel(activePanel === 'chat' ? null : 'chat');
+  }, [activePanel, setActivePanel]);
+
+  const handleToggleParticipants = useCallback(() => {
+    setActivePanel(activePanel === 'participants' ? null : 'participants');
+  }, [activePanel, setActivePanel]);
 
   if (loading) {
     return (
@@ -198,6 +235,9 @@ const Meeting: React.FC = () => {
           onToggleVideo={handleToggleVideo}
           onToggleScreenShare={handleToggleScreenShare}
           onLeaveMeeting={handleLeaveMeeting}
+          onToggleChat={handleToggleChat}
+          onToggleParticipants={handleToggleParticipants}
+          isScreenSharing={isScreenSharing}
         />
       </div>
 

@@ -1,70 +1,196 @@
 .home-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--bg-primary);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
 }
 
 .home-header {
-  text-align: center;
-  color: white;
-  margin-bottom: 40px;
-}
-
-.home-header h1 {
-  font-size: 48px;
-  margin-bottom: 10px;
-}
-
-.home-header p {
-  font-size: 18px;
-  opacity: 0.9;
-}
-
-.user-info {
-  margin-top: 20px;
   display: flex;
   align-items: center;
-  gap: 16px;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-xl);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
 }
 
-.user-info span {
-  font-size: 16px;
+.header-left,
+.header-right {
+  min-width: 150px;
+}
+
+.header-center {
+  text-align: center;
+}
+
+.header-center h1 {
+  font-size: 24px;
+  font-weight: 700;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0;
+}
+
+.header-center p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: var(--spacing-xs) 0 0 0;
+}
+
+.back-home {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--text-secondary);
+  font-size: 14px;
+  transition: color var(--transition-fast);
+}
+
+.back-home:hover {
+  color: var(--color-primary);
+}
+
+.logout-btn {
+  border-color: var(--border-color) !important;
+}
+
+.logout-btn:hover {
+  border-color: var(--color-danger) !important;
+  color: var(--color-danger) !important;
 }
 
 .home-content {
+  flex: 1;
   display: flex;
-  gap: 40px;
+  gap: var(--spacing-xl);
   flex-wrap: wrap;
   justify-content: center;
+  align-items: center;
+  padding: var(--spacing-3xl);
 }
 
 .action-card {
-  width: 280px;
+  width: 320px;
+  padding: var(--spacing-xl);
+  background: var(--gradient-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
   text-align: center;
-  border-radius: 12px;
-  transition: transform 0.3s;
+  transition: all var(--transition-normal);
 }
 
 .action-card:hover {
   transform: translateY(-8px);
+  box-shadow: var(--shadow-lg);
 }
 
-.action-icon {
-  font-size: 48px;
-  color: #667eea;
-  margin-bottom: 16px;
+.create-card .card-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto var(--spacing-lg);
+  background: linear-gradient(135deg, rgba(108, 92, 231, 0.2), rgba(0, 206, 201, 0.2));
+  border-radius: var(--radius-xl);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  color: var(--color-primary);
+}
+
+.join-card .card-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto var(--spacing-lg);
+  background: linear-gradient(135deg, rgba(0, 206, 201, 0.2), rgba(116, 185, 255, 0.2));
+  border-radius: var(--radius-xl);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  color: var(--color-accent);
 }
 
 .action-card h3 {
-  font-size: 20px;
-  margin-bottom: 8px;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
 }
 
 .action-card p {
-  color: #666;
-  margin-bottom: 20px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-xl) 0;
+}
+
+.action-btn {
+  width: 100%;
+  height: 44px !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  background: var(--gradient-button) !important;
+  border: none !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-glow) !important;
+}
+
+/* Modal Styles */
+.meeting-modal .ant-modal-content {
+  background: var(--bg-card) !important;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+}
+
+.meeting-modal .ant-modal-header {
+  background: transparent !important;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.meeting-modal .ant-modal-title {
+  color: var(--text-primary) !important;
+}
+
+.meeting-modal .ant-modal-close {
+  color: var(--text-secondary) !important;
+}
+
+.meeting-modal .ant-form-item-label > label {
+  color: var(--text-secondary) !important;
+}
+
+.meeting-modal .ant-input {
+  background: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+.meeting-modal .ant-input:hover,
+.meeting-modal .ant-input:focus {
+  border-color: var(--color-primary) !important;
+}
+
+.meeting-modal .ant-input-password {
+  background: var(--bg-secondary) !important;
+}
+
+.meeting-modal .ant-input-password-icon {
+  color: var(--text-secondary) !important;
+}
+
+.submit-btn {
+  height: 44px !important;
+  font-weight: 600 !important;
+  background: var(--gradient-button) !important;
+  border: none !important;
+}
+
+.submit-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-glow) !important;
 }

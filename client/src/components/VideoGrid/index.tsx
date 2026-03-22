@@ -7,7 +7,7 @@ interface VideoTileProps {
   stream?: MediaStream;
   isLocal?: boolean;
   audioEnabled: boolean;
-  videoEnabled: boolean;
+  videoEnabled?: boolean;
   isScreenShare?: boolean;
 }
 
@@ -16,7 +16,7 @@ const VideoTile: React.FC<VideoTileProps> = ({
   stream,
   isLocal,
   audioEnabled,
-  videoEnabled,
+  videoEnabled = true,
   isScreenShare,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -24,29 +24,35 @@ const VideoTile: React.FC<VideoTileProps> = ({
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(() => {
+        console.log('Autoplay prevented, waiting for user interaction');
+      });
     }
   }, [stream]);
 
   return (
-    <div className="video-tile">
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted={isLocal}
-        style={{ display: videoEnabled ? 'block' : 'none' }}
-      />
-      {!videoEnabled && !isScreenShare && (
+    <div className={`video-tile ${isScreenShare ? 'video-tile-screen-share' : ''}`}>
+      {stream && videoEnabled ? (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted={isLocal}
+          style={{ width: '100%', height: '100%', objectFit: isScreenShare ? 'contain' : 'cover' }}
+        />
+      ) : (
         <div className="video-placeholder">
-          <div className="avatar">{username.charAt(0).toUpperCase()}</div>
+          <div className="avatar">{(username || '?').charAt(0).toUpperCase()}</div>
         </div>
       )}
       <div className="video-overlay">
         <span className="username">
           {username} {isLocal && '(我)'}
+          {isScreenShare && ' - 屏幕共享'}
         </span>
         <div className="status-icons">
           {!audioEnabled && <span className="muted-icon">🔇</span>}
+          {isScreenShare && <span className="screen-icon">🖥️</span>}
         </div>
       </div>
     </div>
@@ -56,7 +62,7 @@ const VideoTile: React.FC<VideoTileProps> = ({
 interface VideoGridProps {
   localStream?: MediaStream;
   screenStream?: MediaStream;
-  remoteStreams: Map<string, { peerId: string; kind: string; stream: MediaStream }>;
+  remoteStreams: Map<string, { peerId: string; stream: MediaStream }>;
 }
 
 export const VideoGrid: React.FC<VideoGridProps> = ({
@@ -64,47 +70,94 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
   screenStream,
   remoteStreams,
 }) => {
-  const { peerId, peers, localAudioEnabled, localVideoEnabled } = useMeetingStore();
+  const { peerId, peers, localAudioEnabled, localVideoEnabled, isScreenSharing } = useMeetingStore();
+
+  const screenSharePeers = useMemo(() => {
+    const result: Array<{ peerId: string; stream: MediaStream }> = [];
+    remoteStreams.forEach((data, id) => {
+      const peer = peers.get(id);
+      if (peer?.isScreenSharing) {
+        result.push(data);
+      }
+    });
+    return result;
+  }, [remoteStreams, peers]);
+
+  const normalPeers = useMemo(() => {
+    return Array.from(peers.values()).filter(
+      (peer) => !peer.isScreenSharing && peer.id !== peerId
+    );
+  }, [peers, peerId]);
 
   const gridLayout = useMemo(() => {
-    const count = peers.size;
+    const count = normalPeers.length + 1;
     if (count <= 1) return { cols: 1, rows: 1 };
     if (count <= 2) return { cols: 2, rows: 1 };
     if (count <= 4) return { cols: 2, rows: 2 };
     if (count <= 6) return { cols: 3, rows: 2 };
     if (count <= 9) return { cols: 3, rows: 3 };
-    if (count <= 12) return { cols: 4, rows: 3 };
-    if (count <= 16) return { cols: 4, rows: 4 };
-    return { cols: 5, rows: Math.ceil(count / 5) };
-  }, [peers.size]);
+    return { cols: 4, rows: Math.ceil(count / 4) };
+  }, [normalPeers.length]);
 
-  const getStreamForPeer = (pId: string, kind: 'audio' | 'video'): MediaStream | undefined => {
-    if (pId === peerId) {
-      return kind === 'video' ? localStream : localStream;
-    }
+  if (isScreenSharing || screenStream || screenSharePeers.length > 0) {
+    const mainScreenStream = screenStream || screenSharePeers[0]?.stream;
+    const mainScreenPeerId = screenSharePeers[0]?.peerId;
+    const mainScreenPeer = mainScreenPeerId ? peers.get(mainScreenPeerId) : null;
 
-    for (const [, remoteStream] of remoteStreams) {
-      if (remoteStream.peerId === pId && remoteStream.kind === kind) {
-        return remoteStream.stream;
-      }
-    }
-    return undefined;
-  };
+    return (
+      <div className="video-grid-container video-grid-screen-share-mode">
+        <div className="main-content">
+          {mainScreenStream && (
+            <div className="screen-share-main">
+              <VideoTile
+                peerId={mainScreenPeerId}
+                username={mainScreenPeer?.username || '屏幕共享'}
+                stream={mainScreenStream}
+                isScreenShare={true}
+                audioEnabled={false}
+                videoEnabled={true}
+              />
+            </div>
+          )}
+          
+          {localStream && (
+            <div className="local-pip">
+              <VideoTile
+                peerId={peerId || undefined}
+                username="我"
+                stream={localStream}
+                isLocal={true}
+                audioEnabled={localAudioEnabled}
+                videoEnabled={localVideoEnabled}
+              />
+            </div>
+          )}
+        </div>
+
+        {normalPeers.length > 0 && (
+          <div className="participants-bar">
+            {normalPeers.map((peer) => {
+              const streamData = remoteStreams.get(peer.id);
+              return (
+                <div key={peer.id} className="participant-tile">
+                  <VideoTile
+                    peerId={peer.id}
+                    username={peer.username}
+                    stream={streamData?.stream}
+                    audioEnabled={peer.audioEnabled}
+                    videoEnabled={peer.videoEnabled}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="video-grid-container">
-      {screenStream && (
-        <div className="screen-share-container">
-          <video
-            autoPlay
-            playsInline
-            ref={(el) => {
-              if (el) el.srcObject = screenStream;
-            }}
-          />
-        </div>
-      )}
-
       <div
         className="video-grid"
         style={{
@@ -112,17 +165,30 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
           gridTemplateRows: `repeat(${gridLayout.rows}, 1fr)`,
         }}
       >
-        {Array.from(peers.values()).map((peer) => (
+        {localStream && (
           <VideoTile
-            key={peer.id}
-            peerId={peer.id}
-            username={peer.username}
-            stream={getStreamForPeer(peer.id, 'video')}
-            isLocal={peer.id === peerId}
-            audioEnabled={peer.id === peerId ? localAudioEnabled : peer.audioEnabled}
-            videoEnabled={peer.id === peerId ? localVideoEnabled : peer.videoEnabled}
+            peerId={peerId || undefined}
+            username="我"
+            stream={localStream}
+            isLocal={true}
+            audioEnabled={localAudioEnabled}
+            videoEnabled={localVideoEnabled}
           />
-        ))}
+        )}
+        
+        {Array.from(remoteStreams.values()).map((remoteStreamData) => {
+          const peer = peers.get(remoteStreamData.peerId);
+          return (
+            <VideoTile
+              key={remoteStreamData.peerId}
+              peerId={remoteStreamData.peerId}
+              username={peer?.username || `User ${remoteStreamData.peerId.slice(-4)}`}
+              stream={remoteStreamData.stream}
+              audioEnabled={peer?.audioEnabled ?? true}
+              videoEnabled={peer?.videoEnabled ?? true}
+            />
+          );
+        })}
       </div>
     </div>
   );

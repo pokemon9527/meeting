@@ -17,15 +17,21 @@ export const ParticipantList: React.FC = () => {
 
   const handleMute = (targetPeerId: string) => {
     const socket = getSocket();
-    if (socket) {
-      socket.emit('mute-participant', { targetPeerId });
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        event: 'mute-participant',
+        data: { target_peer_id: targetPeerId },
+      }));
     }
   };
 
   const handleRemove = (targetPeerId: string) => {
     const socket = getSocket();
-    if (socket) {
-      socket.emit('remove-participant', { targetPeerId });
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        event: 'remove-participant',
+        data: { target_peer_id: targetPeerId },
+      }));
     }
   };
 
@@ -70,10 +76,10 @@ export const ParticipantList: React.FC = () => {
             }
           >
             <List.Item.Meta
-              avatar={<Avatar src={peer.avatar}>{peer.username.charAt(0)}</Avatar>}
+              avatar={<Avatar src={peer.avatar}>{(peer.username || '?').charAt(0).toUpperCase()}</Avatar>}
               title={
                 <div className="participant-title">
-                  <span>{peer.username}</span>
+                  <span>{peer.username || '未知用户'}</span>
                   {peer.id === peerId && <Tag color="blue">我</Tag>}
                   {peer.role === 'host' && <Tag color="gold">主持人</Tag>}
                   {peer.role === 'cohost' && <Tag color="green">联席主持人</Tag>}

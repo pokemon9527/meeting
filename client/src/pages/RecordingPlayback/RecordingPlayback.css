@@ -1,0 +1,101 @@
+.recording-playback-container {
+  display: flex;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  min-height: calc(100vh - 64px);
+  background: var(--bg-secondary);
+}
+
+.recording-list-section {
+  width: 400px;
+  flex-shrink: 0;
+}
+
+.recording-list-section h4 {
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-md);
+}
+
+.recording-item {
+  background: var(--bg-primary);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-md) !important;
+  margin-bottom: var(--spacing-sm);
+  transition: all var(--transition-fast);
+}
+
+.recording-item:hover {
+  background: var(--bg-elevated);
+  transform: translateX(4px);
+}
+
+.recording-item.selected {
+  border: 2px solid var(--primary);
+  background: var(--bg-elevated);
+}
+
+.recording-player-section {
+  flex: 1;
+  background: var(--bg-primary);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.player-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+}
+
+.player-header h4 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.player-wrapper {
+  width: 100%;
+  background: #000;
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+}
+
+.participant-timeline {
+  margin-top: var(--spacing-md);
+}
+
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.timeline-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-xs) 0;
+}
+
+.no-recording-selected,
+.recording-playback-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  min-height: 400px;
+}
+
+@media (max-width: 1024px) {
+  .recording-playback-container {
+    flex-direction: column;
+  }
+
+  .recording-list-section {
+    width: 100%;
+  }
+}

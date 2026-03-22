@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AudioOutlined,
   AudioMutedOutlined,
@@ -18,6 +18,9 @@ interface ToolbarProps {
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
   onLeaveMeeting: () => void;
+  onToggleChat?: () => void;
+  onToggleParticipants?: () => void;
+  isScreenSharing?: boolean;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -25,11 +28,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onToggleVideo,
   onToggleScreenShare,
   onLeaveMeeting,
+  onToggleChat,
+  onToggleParticipants,
+  isScreenSharing: isScreenSharingProp,
 }) => {
   const {
     localAudioEnabled,
     localVideoEnabled,
-    isScreenSharing,
     isHandRaised,
     unreadMessages,
     activePanel,
@@ -37,6 +42,33 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     toggleHandRaise,
     peers,
   } = useMeetingStore();
+
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const screenSharing = isScreenSharingProp ?? false;
+
+  const handleToggleChat = () => {
+    if (onToggleChat) {
+      onToggleChat();
+    } else {
+      setActivePanel(activePanel === 'chat' ? null : 'chat');
+    }
+  };
+
+  const handleToggleParticipants = () => {
+    if (onToggleParticipants) {
+      onToggleParticipants();
+    } else {
+      setActivePanel(activePanel === 'participants' ? null : 'participants');
+    }
+  };
 
   return (
     <div className="toolbar">
@@ -57,6 +89,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             icon={localAudioEnabled ? <AudioOutlined /> : <AudioMutedOutlined />}
             onClick={onToggleAudio}
             danger={!localAudioEnabled}
+            className="toolbar-btn"
           />
         </Tooltip>
 
@@ -68,16 +101,18 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             icon={localVideoEnabled ? <VideoCameraOutlined /> : <VideoCameraAddOutlined />}
             onClick={onToggleVideo}
             danger={!localVideoEnabled}
+            className="toolbar-btn"
           />
         </Tooltip>
 
-        <Tooltip title={isScreenSharing ? '停止共享' : '共享屏幕'}>
+        <Tooltip title={screenSharing ? '停止共享' : '共享屏幕'}>
           <Button
-            type={isScreenSharing ? 'primary' : 'default'}
+            type={screenSharing ? 'primary' : 'default'}
             shape="circle"
             size="large"
             icon={<DesktopOutlined />}
             onClick={onToggleScreenShare}
+            className={`toolbar-btn ${screenSharing ? 'toolbar-btn-active' : ''}`}
           />
         </Tooltip>
 
@@ -88,19 +123,21 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             size="large"
             icon={<LikeOutlined />}
             onClick={toggleHandRaise}
+            className="toolbar-btn"
           />
         </Tooltip>
 
+        <div className="toolbar-divider" />
+
         <Tooltip title="聊天">
-          <Badge count={unreadMessages} size="small">
+          <Badge count={unreadMessages} size="small" offset={[0, -4]}>
             <Button
               type={activePanel === 'chat' ? 'primary' : 'default'}
               shape="circle"
               size="large"
               icon={<MessageOutlined />}
-              onClick={() =>
-                setActivePanel(activePanel === 'chat' ? null : 'chat')
-              }
+              onClick={handleToggleChat}
+              className="toolbar-btn"
             />
           </Badge>
         </Tooltip>
@@ -111,13 +148,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             shape="circle"
             size="large"
             icon={<TeamOutlined />}
-            onClick={() =>
-              setActivePanel(
-                activePanel === 'participants' ? null : 'participants'
-              )
-            }
+            onClick={handleToggleParticipants}
+            className="toolbar-btn"
           />
         </Tooltip>
+
+        <div className="toolbar-divider" />
 
         <Tooltip title="离开会议">
           <Button
@@ -127,13 +163,17 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             size="large"
             icon={<LogoutOutlined />}
             onClick={onLeaveMeeting}
+            className="toolbar-btn toolbar-btn-leave"
           />
         </Tooltip>
       </div>
 
       <div className="toolbar-right">
         <span className="time-display">
-          {new Date().toLocaleTimeString()}
+          {currentTime.toLocaleTimeString('zh-CN', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          })}
         </span>
       </div>
     </div>

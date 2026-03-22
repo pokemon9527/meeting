@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Form, Input, Button, message, Tabs, Card } from 'antd';
-import { UserOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
+import { UserOutlined, LockOutlined, MailOutlined, HomeOutlined } from '@ant-design/icons';
 import { useUserStore } from '../../stores/userStore';
 import './Login.css';
 
@@ -12,7 +12,7 @@ const Login: React.FC = () => {
   const [activeTab, setActiveTab] = useState('login');
 
   if (isAuthenticated) {
-    navigate('/');
+    navigate('/home');
     return null;
   }
 
@@ -21,9 +21,9 @@ const Login: React.FC = () => {
     try {
       await login(values.email, values.password);
       message.success('登录成功');
-      navigate('/');
+      navigate('/home');
     } catch (error: any) {
-      message.error(error.response?.data?.message || '登录失败');
+      message.error(error.response?.data?.error || error.response?.data?.message || error.message || '登录失败');
     } finally {
       setLoading(false);
     }
@@ -34,9 +34,9 @@ const Login: React.FC = () => {
     try {
       await register(values.username, values.email, values.password);
       message.success('注册成功');
-      navigate('/');
+      navigate('/home');
     } catch (error: any) {
-      message.error(error.response?.data?.message || '注册失败');
+      message.error(error.response?.data?.error || error.response?.data?.message || error.message || '注册失败');
     } finally {
       setLoading(false);
     }
@@ -62,7 +62,7 @@ const Login: React.FC = () => {
       </Form.Item>
 
       <Form.Item>
-        <Button type="primary" htmlType="submit" loading={loading} block>
+        <Button type="primary" htmlType="submit" loading={loading} block className="submit-btn">
           登录
         </Button>
       </Form.Item>
@@ -120,7 +120,7 @@ const Login: React.FC = () => {
       </Form.Item>
 
       <Form.Item>
-        <Button type="primary" htmlType="submit" loading={loading} block>
+        <Button type="primary" htmlType="submit" loading={loading} block className="submit-btn">
           注册
         </Button>
       </Form.Item>
@@ -129,9 +129,21 @@ const Login: React.FC = () => {
 
   return (
     <div className="login-container">
+      <div className="login-bg">
+        <div className="login-particles" />
+      </div>
+      
+      <Link to="/" className="back-home">
+        <HomeOutlined />
+        <span>返回首页</span>
+      </Link>
+
       <Card className="login-card">
         <div className="login-header">
-          <h1>视频会议</h1>
+          <div className="login-logo">
+            <span className="logo-icon">📹</span>
+            <span className="logo-text">MeetPro</span>
+          </div>
           <p>登录或注册开始使用</p>
         </div>
 
@@ -139,6 +151,7 @@ const Login: React.FC = () => {
           activeKey={activeTab}
           onChange={setActiveTab}
           centered
+          className="login-tabs"
           items={[
             {
               key: 'login',

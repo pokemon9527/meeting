@@ -16,35 +16,31 @@ import (
 func main() {
 	cfg := config.Load()
 
-	// Initialize JWT
 	jwtUtil.Init(cfg.JWTSecret, cfg.JWTRefresh)
 
-	// Initialize database
 	db := database.NewPostgres(cfg.PostgresDSN)
 
-	// Auto migrate
 	database.AutoMigrate(db,
 		&models.User{},
 		&models.Meeting{},
 		&models.Participant{},
 		&models.ChatMessage{},
+		&models.Recording{},
+		&models.RecordingSegment{},
+		&models.RecordingJob{},
+		&models.RecordingAsset{},
 	)
 
-	// Create router
 	r := gin.Default()
 
-	// Middleware
 	r.Use(middleware.CORS())
 
-	// Health check
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	// API routes
 	api := r.Group("/api")
 	{
-		// Auth routes
 		auth := api.Group("/auth")
 		{
 			auth.POST("/register", handlers.Register(db))
@@ -53,7 +49,6 @@ func main() {
 			auth.GET("/me", middleware.Auth(), handlers.GetCurrentUser(db))
 		}
 
-		// Meeting routes
 		meetings := api.Group("/meetings")
 		meetings.Use(middleware.Auth())
 		{
@@ -64,6 +59,16 @@ func main() {
 			meetings.PUT("/:meetingId/settings", handlers.UpdateMeetingSettings(db))
 			meetings.POST("/:meetingId/end", handlers.EndMeeting(db))
 			meetings.DELETE("/:meetingId", handlers.DeleteMeeting(db))
+		}
+
+		recordings := api.Group("/recordings")
+		recordings.Use(middleware.Auth())
+		{
+			recordings.GET("", handlers.GetMyRecordings(db))
+			recordings.GET("/:recordingId", handlers.GetRecording(db))
+			recordings.GET("/:recordingId/playlist", handlers.GetRecordingPlaylist(db))
+			recordings.GET("/:recordingId/segments", handlers.GetRecordingSegments(db))
+			recordings.DELETE("/:recordingId", handlers.DeleteRecording(db))
 		}
 	}
 

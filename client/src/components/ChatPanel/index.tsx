@@ -23,11 +23,14 @@ export const ChatPanel: React.FC = () => {
     if (!inputValue.trim()) return;
 
     const socket = getSocket();
-    if (socket) {
-      socket.emit('send-message', {
-        content: inputValue.trim(),
-        type: 'text',
-      });
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        event: 'send-message',
+        data: {
+          content: inputValue.trim(),
+          type: 'text',
+        },
+      }));
     }
 
     setInputValue('');
@@ -61,7 +64,7 @@ export const ChatPanel: React.FC = () => {
             className={`message ${msg.senderId === user?.id ? 'self' : ''}`}
           >
             <Avatar size="small" src={msg.senderAvatar}>
-              {msg.senderName.charAt(0)}
+              {(msg.senderName || '?').charAt(0).toUpperCase()}
             </Avatar>
             <div className="message-content">
               <div className="message-header">

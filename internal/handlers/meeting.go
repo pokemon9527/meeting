@@ -20,7 +20,7 @@ type CreateMeetingRequest struct {
 }
 
 type JoinMeetingRequest struct {
-	MeetingID string `json:"meeting_id" binding:"required"`
+	MeetingID string `json:"meetingId" binding:"required"`
 	Password  string `json:"password"`
 }
 
